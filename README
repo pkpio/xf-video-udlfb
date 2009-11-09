@@ -1,0 +1,121 @@
+Xinerama setup for multiple DisplayLink devices:
+#################################################
+
+Section "Device"
+        Identifier      "dl0"
+        driver          "displaylink"
+        Option  "fbdev" "/dev/fb0"
+EndSection
+
+Section "Device"
+        Identifier      "dl1"
+        driver          "displaylink"
+        Option  "fbdev" "/dev/fb1"
+EndSection
+
+Section "Monitor"
+        Identifier "monitor0"
+EndSection
+
+Section "Monitor"
+        Identifier "monitor1"
+EndSection
+
+Section "Screen"
+        Identifier "screen0"
+        Device "dl0"
+        Monitor "monitor0"
+EndSection
+
+Section "Screen"
+        Identifier "screen1"
+        Device "dl1"
+        Monitor "monitor1"
+EndSection
+
+
+Section "ServerLayout"
+        Identifier     "multihead"
+        Screen      0  "screen0" 0 0
+        Screen      1  "screen1" LeftOf "screen0"
+        Option "Xinerama" "on"
+        Option "Clone" "off"
+EndSection
+
+###################################################
+
+Multiple screen (using an integrated intel gfx card):
+###################################################
+###################################################
+
+
+Section "Device"
+	Identifier      "intel"
+	driver          "intel"
+EndSection
+
+Section "Device"
+	Identifier      "dl0"
+	driver          "displaylink"
+	Option  "fbdev" "/dev/fb0"
+EndSection
+
+Section "Device"
+	Identifier      "dl1"
+	driver          "displaylink"
+	Option  "fbdev" "/dev/fb1"
+EndSection
+
+Section "Device"
+	Identifier      "dl2"
+	driver          "displaylink"
+	Option  "fbdev" "/dev/fb2"
+EndSection
+
+Section "Monitor"
+	Identifier "monitor0"
+EndSection
+
+Section "Monitor"
+	Identifier "monitor1"
+EndSection
+
+Section "Monitor"
+	Identifier "monitor2"
+EndSection
+
+Section "Monitor"
+	Identifier "monitor3"
+EndSection
+
+Section "Screen"
+	Identifier "screen0"
+	Device "intel"
+	Monitor "monitor2"
+EndSection
+
+Section "Screen"
+	Identifier "screen2"
+	Device "dl0"
+	Monitor "monitor0"
+EndSection
+
+Section "Screen"
+	Identifier "screen3"
+	Device "dl2"
+	Monitor "monitor3"
+EndSection
+
+Section "Screen"
+	Identifier "screen1"
+	Device "dl1"
+	Monitor "monitor1"
+EndSection
+
+Section "ServerLayout"
+	Identifier     "multihead"
+	Screen      0  "screen0" 0 0
+	Screen      1  "screen1" LeftOf "screen0"
+	Screen      2  "screen2" RightOf "screen0"
+	Screen      3  "screen3" LeftOf "screen1"
+EndSection
