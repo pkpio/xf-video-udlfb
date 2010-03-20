@@ -33,6 +33,11 @@ typedef struct {
         PixmapPtr                       pPixmap;
         xf86CrtcPtr			crtc;
 	xf86OutputPtr			output;
+
+	/* RandR */
+	RRModePtr						pRRMode;
+	RRCrtcPtr						pRRCrtc;
+	RROutputPtr						pRROutput;
 } DisplayLinkRec, *DisplayLinkPtr;
 
 // macro from fbdev

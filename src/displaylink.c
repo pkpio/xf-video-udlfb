@@ -63,10 +63,32 @@ static Bool	DisplayLinkCloseScreen(int scrnIndex, ScreenPtr pScreen);
 
 static Bool	DisplayLinkDriverFunc(ScrnInfoPtr pScrn, xorgDriverFuncOp op,
 				pointer ptr);
+static Bool DisplayLinkInitRandR(ScreenPtr pScreen);
 
 // damage handler
 static void DLBlockHandler(pointer data, OSTimePtr pTimeout, pointer pRead);
 static void DLWakeupHandler(pointer data, int i, pointer LastSelectMask);
+
+/* RandR */
+#ifdef RANDR_10_INTERFACE
+static Bool DLRRSetConfigProc(ScreenPtr pScreen, Rotation rotation, int rate, RRScreenSizePtr pSize);
+#endif /* RANDR_10_INTERFACE */
+#if RANDR_12_INTERFACE
+static Bool DLRRScreenSetSizeProc(ScreenPtr pScreen, CARD16 width, CARD16 height, CARD32 mmWidth, CARD32 mmHeight);
+static Bool DLRRCrtcSetProc(ScreenPtr pScreen, RRCrtcPtr crtc, RRModePtr mode, int x, int y, Rotation rotation, int numOutputs, RROutputPtr *outputs);
+static Bool DLRRCrtcSetGammaProc(ScreenPtr pScreen, RRCrtcPtr crtc);
+static Bool DLRRCrtcGetGammaProc(ScreenPtr pScreen, RRCrtcPtr crtc);
+static Bool DLRROutputSetPropertyProc(ScreenPtr pScreen, RROutputPtr output, Atom property, RRPropertyValuePtr value);
+static Bool DLRROutputValidateModeProc(ScreenPtr pScreen, RROutputPtr output, RRModePtr mode);
+static void DLRRModeDestroyProc(ScreenPtr pScreen, RRModePtr mode);
+#endif /* RANDR_12_INTERFACE */
+#if RANDR_13_INTERFACE
+static Bool DLRROutputGetPropertyProc(ScreenPtr pScreen, RROutputPtr output, Atom property);
+static Bool DLRRGetPanningProc(ScreenPtr pScrn, RRCrtcPtr crtc, BoxPtr totalArea, BoxPtr trackingArea, INT16 *border);
+static Bool DLRRSetPanningProc(ScreenPtr pScrn, RRCrtcPtr crtc, BoxPtr totalArea, BoxPtr trackingArea, INT16 *border);
+#endif /* RANDR_13_INTERFACE */
+static Bool DLRRGetInfoProc(ScreenPtr pScreen, Rotation *rotations);
+static Bool DLRRCloseScreenProc(int i, ScreenPtr pScreen);
 
 
 
@@ -469,7 +491,7 @@ DisplayLinkScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 	fPtr->fboff = fbdevHWLinearOffset(pScrn);
 
 	fbdevHWSave(pScrn);
-
+	fbdevHWModeInit(pScrn, pScrn->currentMode);
 	fbdevHWSaveScreen(pScreen, SCREEN_SAVER_ON);
 	fbdevHWAdjustFrame(scrnIndex,0,0,0);
 
@@ -549,9 +571,16 @@ DisplayLinkScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 
 	pScreen->SaveScreen = fbdevHWSaveScreenWeak();
 
+	/* Should probably do this earlier in case it fails */
+	if (!DisplayLinkInitRandR(pScreen))
+		return FALSE;
+
 	/* Wrap the current CloseScreen function */
 	fPtr->CloseScreen = pScreen->CloseScreen;
 	pScreen->CloseScreen = DisplayLinkCloseScreen;
+
+	if (serverGeneration == 1)
+		xf86ShowUnusedOptions(pScrn->scrnIndex, pScrn->options);
 
 	return TRUE;
 }
@@ -650,3 +679,208 @@ DLWakeupHandler(pointer data, int i, pointer LastSelectMask)
 {
 }
 
+static Bool
+DisplayLinkInitRandR(ScreenPtr pScreen)
+{
+	rrScrPrivPtr pScrPriv;
+	RRScreenSizePtr pScrSz;
+	ScrnInfoPtr pScrn;
+	DisplayLinkPtr pDLPtr;
+
+    xRRModeInfo modeInfo;
+    char name[64];
+
+	int rotations = RR_Rotate_0;
+
+	if (pScreen == NULL)
+		return FALSE;
+
+	pScrn = xf86Screens[pScreen->myNum];
+	if (pScrn == NULL)
+		return FALSE;
+
+	pDLPtr = DLPTR(pScrn);
+	if (pDLPtr == NULL)
+		return FALSE;
+
+	if (!RRScreenInit(pScreen))
+		return FALSE;
+
+	pScrPriv = rrGetScrPriv(pScreen);
+	if (pScrPriv == NULL)
+		return FALSE;
+
+	/* Setup function pointers */	
+#if RANDR_10_INTERFACE
+	pScrPriv->rrSetConfig = DLRRSetConfigProc;
+#endif /* RANDR_10_INTERFACE */
+#if RANDR_12_INTERFACE
+	pScrPriv->rrScreenSetSize = DLRRScreenSetSizeProc;
+	pScrPriv->rrCrtcSet = DLRRCrtcSetProc;
+	pScrPriv->rrCrtcSetGamma = DLRRCrtcSetGammaProc;
+	/*pScrPriv->rrCrtcGetGamma = DLRRCrtcGetGammaProc;*/
+	pScrPriv->rrOutputSetProperty = DLRROutputSetPropertyProc;
+	pScrPriv->rrOutputValidateMode = DLRROutputValidateModeProc;
+	pScrPriv->rrModeDestroy = DLRRModeDestroyProc;
+#endif /* RANDR_12_INTERFACE */
+#if RANDR_13_INTERFACE
+	pScrPriv->rrOutputGetProperty = DLRROutputGetPropertyProc;
+	pScrPriv->rrGetPanning = DLRRGetPanningProc;
+	pScrPriv->rrSetPanning = DLRRSetPanningProc;
+#endif /* RANDR_13_INTERFACE */
+	pScrPriv->rrGetInfo = DLRRGetInfoProc;
+	pScrPriv->CloseScreen	= DLRRCloseScreenProc;
+
+	sprintf(name, "%dx%d", pScreen->width, pScreen->height);
+    memset(&modeInfo, '\0', sizeof(modeInfo));
+    modeInfo.width = pScreen->width;
+    modeInfo.height = pScreen->height;
+    modeInfo.nameLength = strlen(name);
+    
+    pDLPtr->pRRMode = RRModeGet(&modeInfo, name);
+    if (!pDLPtr->pRRMode)
+	{
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "RRModeGet failed!\n");
+		return FALSE;
+	}
+
+	pDLPtr->pRRCrtc = RRCrtcCreate(pScreen, NULL);
+	if (pDLPtr->pRRCrtc == NULL)
+	{
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "RRCrtcCreate failed!\n");
+		return FALSE;
+	}
+	
+	pDLPtr->pRROutput = RROutputCreate(pScreen, pScrn->name, strlen(pScrn->name), NULL);
+	if (pDLPtr->pRROutput == NULL)
+	{
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "RROutputCreate failed!\n");
+		return FALSE;
+	}
+
+	if (!RROutputSetClones(pDLPtr->pRROutput, NULL, 0))
+	{
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "RROutputSetClones failed!\n");
+		return FALSE;
+	}
+
+    if (!RROutputSetModes(pDLPtr->pRROutput, &(pDLPtr->pRRMode), 1, 0))
+	{
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "RROutputSetModes failed!\n");
+		return FALSE;
+	}
+
+    if (!RROutputSetCrtcs(pDLPtr->pRROutput, &(pDLPtr->pRRCrtc), 1))
+	{
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "RROutputSetCrtcs failed!\n");
+		return FALSE;
+	}
+
+    if (!RROutputSetConnection(pDLPtr->pRROutput, RR_Connected))
+	{
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "RROutputSetConnection failed!\n");
+		return FALSE;
+	}
+
+    RRCrtcNotify(pDLPtr->pRRCrtc, pDLPtr->pRRMode, 0, 0, RR_Rotate_0, NULL, 1, &(pDLPtr->pRROutput));
+
+	return TRUE;
+}
+
+#ifdef RANDR_10_INTERFACE
+static Bool
+DLRRSetConfigProc(ScreenPtr pScreen, Rotation rotation, int rate, RRScreenSizePtr pSize)
+{
+	/* What goes here? */
+	return FALSE;
+}
+#endif /* RANDR_10_INTERFACE */
+
+#if RANDR_12_INTERFACE
+static Bool DLRRScreenSetSizeProc(ScreenPtr pScreen, CARD16 width, CARD16 height, CARD32 mmWidth, CARD32 mmHeight)
+{
+	/* What goes here? */
+	return FALSE;	
+}
+
+static Bool
+DLRRCrtcSetProc(ScreenPtr pScreen, RRCrtcPtr crtc, RRModePtr mode, int x, int y, Rotation rotation, int numOutputs, RROutputPtr *outputs)
+{
+	/* What goes here? */
+	return FALSE;
+}
+
+static Bool
+DLRRCrtcSetGammaProc(ScreenPtr pScreen, RRCrtcPtr crtc)
+{
+	/* What goes here? */
+	return FALSE;
+}
+
+static Bool
+DLRRCrtcGetGammaProc(ScreenPtr pScreen, RRCrtcPtr crtc)
+{
+	/* What goes here? */
+	return FALSE;
+}
+
+static Bool
+DLRROutputSetPropertyProc(ScreenPtr pScreen, RROutputPtr output, Atom property, RRPropertyValuePtr value)
+{
+	/* What goes here? */
+	return FALSE;
+}
+
+static Bool
+DLRROutputValidateModeProc(ScreenPtr pScreen, RROutputPtr output, RRModePtr mode)
+{
+	/* What goes here? */
+	return FALSE;
+}
+
+static void
+DLRRModeDestroyProc(ScreenPtr pScreen, RRModePtr mode)
+{
+	/* What goes here? */
+}
+#endif /* RANDR_12_INTERFACE */
+
+#if RANDR_13_INTERFACE
+static Bool
+DLRROutputGetPropertyProc(ScreenPtr pScreen, RROutputPtr output, Atom property)
+{
+	/* What goes here? */
+	return FALSE;
+}
+
+static Bool
+DLRRGetPanningProc(ScreenPtr pScrn, RRCrtcPtr crtc, BoxPtr totalArea, BoxPtr trackingArea, INT16 *border)
+{
+	/* What goes here? */
+	return FALSE;
+}
+
+static Bool
+DLRRSetPanningProc(ScreenPtr pScrn, RRCrtcPtr crtc, BoxPtr totalArea, BoxPtr trackingArea, INT16 *border)
+{
+	/* What goes here? */
+	return FALSE;
+}
+#endif /* RANDR_13_INTERFACE */
+
+static Bool
+DLRRGetInfoProc(ScreenPtr pScreen, Rotation *rotations)
+{
+	/* No rotations */
+	if (rotations != NULL)
+		*rotations = RR_Rotate_0;
+
+	return TRUE;
+}
+
+static Bool
+DLRRCloseScreenProc(int i, ScreenPtr pScreen)
+{
+	/* What goes here? */
+	return TRUE;
+}
