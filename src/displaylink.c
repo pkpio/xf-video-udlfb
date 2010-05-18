@@ -46,9 +46,6 @@ TODO:
 
 #include "fb.h"
 
-#include "xf86Resources.h"
-#include "xf86RAC.h"
-
 #include "fbdevhw.h"
 
 
@@ -303,10 +300,6 @@ DisplayLinkPreInit(ScrnInfoPtr pScrn, int flags)
 	fPtr = DLPTR(pScrn);
 
 	fPtr->pEnt = xf86GetEntityInfo(pScrn->entityList[0]);
-
-	pScrn->racMemFlags = RAC_FB | RAC_COLORMAP | RAC_CURSOR | RAC_VIEWPORT;
-	/* XXX Is this right?  Can probably remove RAC_FB */
-	pScrn->racIoFlags = RAC_FB | RAC_COLORMAP | RAC_CURSOR | RAC_VIEWPORT;
 
 	/* open device */
 	if (!fbdevHWInit(pScrn,NULL,xf86FindOptionValue(fPtr->pEnt->device->options,"fbdev")))
