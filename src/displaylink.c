@@ -486,7 +486,7 @@ DisplayLinkScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 	fbdevHWSave(pScrn);
 	fbdevHWModeInit(pScrn, pScrn->currentMode);
 	fbdevHWSaveScreen(pScreen, SCREEN_SAVER_ON);
-	fbdevHWAdjustFrame(scrnIndex,0,0,0);
+	//fbdevHWAdjustFrame(scrnIndex,0,0,0);
 
 	miClearVisualTypes();
 	if (!miSetVisualTypes(pScrn->depth, TrueColorMask, pScrn->rgbBits, TrueColor)) {
@@ -594,7 +594,8 @@ DisplayLinkCloseScreen(int scrnIndex, ScreenPtr pScreen)
 
 	pScreen->CreateScreenResources = fPtr->CreateScreenResources;
 	pScreen->CloseScreen = fPtr->CloseScreen;
-	return (*pScreen->CloseScreen)(scrnIndex, pScreen);
+	return TRUE;
+	//return (*pScreen->CloseScreen)(scrnIndex, pScreen);
 }
 
 
