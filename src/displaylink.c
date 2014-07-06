@@ -589,13 +589,13 @@ DisplayLinkCloseScreen(int scrnIndex, ScreenPtr pScreen)
                                  (pointer) pScreen);
 	fbdevHWRestore(pScrn);
 	fbdevHWUnmapVidmem(pScrn);
-	//close(fPtr->fd);
+	close(fPtr->fd);
 	pScrn->vtSema = FALSE;
 
 	pScreen->CreateScreenResources = fPtr->CreateScreenResources;
 	pScreen->CloseScreen = fPtr->CloseScreen;
-	return TRUE;
-	//return (*pScreen->CloseScreen)(scrnIndex, pScreen);
+	//return TRUE;
+	return (*pScreen->CloseScreen)(scrnIndex, pScreen);
 }
 
 
