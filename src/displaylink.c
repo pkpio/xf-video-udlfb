@@ -583,8 +583,6 @@ DisplayLinkCloseScreen(int scrnIndex, ScreenPtr pScreen)
 {
 	ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
 	DisplayLinkPtr fPtr = DLPTR(pScrn);
-	CloseScreenProcPtr tmpCloseScreen;
-	Bool tmpRet;
 	
 	DamageUnregister(&fPtr->pPixmap->drawable, fPtr->pDamage);
 	RemoveBlockAndWakeupHandlers(DLBlockHandler, DLWakeupHandler,
@@ -596,10 +594,7 @@ DisplayLinkCloseScreen(int scrnIndex, ScreenPtr pScreen)
 
 	pScreen->CreateScreenResources = fPtr->CreateScreenResources;
 	pScreen->CloseScreen = fPtr->CloseScreen;
-	tmpCloseScreen =  pScreen->CloseScreen;
-	tmpRet = tmpCloseScreen(pScreen);
-	//return TRUE;
-	return tmpRet;
+	return (*pScreen->CloseScreen)(pScreen);
 }
 
 
